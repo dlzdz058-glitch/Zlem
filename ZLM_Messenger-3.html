@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ZLM Messenger — Zenly & Blink Style</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Firebase App, Realtime Database, Storage & Auth Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        zlm: {
+                            bg: '#08080C',
+                            card: 'rgba(20, 22, 32, 0.85)',
+                            pink: '#FF2A85',
+                            purple: '#A855F7',
+                            cyan: '#00F2FE',
+                            lime: '#39FF14',
+                            yellow: '#FFD700'
+                        }
+                    },
+                    boxShadow: {
+                        'neon-pink': '0 0 25px rgba(255, 42, 133, 0.5)',
+                        'neon-purple': '0 0 25px rgba(168, 85, 247, 0.5)',
+                        'neon-cyan': '0 0 25px rgba(0, 242, 254, 0.5)',
+                        'island': '0 20px 40px -15px rgba(0, 0, 0, 0.8)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #08080C;
+            color: #FFFFFF;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        #bgCanvas {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 0; pointer-events: none;
+        }
+
+        .glass-island {
+            background: rgba(20, 22, 34, 0.8);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .video-note {
+            width: 170px; height: 170px;
+            border-radius: 50%; object-fit: cover;
+            border: 3px solid #00F2FE;
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.6);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+
+        .swipe-drawer {
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            touch-action: none;
+        }
+
+        @keyframes toastIn {
+            from { transform: translateY(-100%) scale(0.9); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .toast-animate { animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.08); opacity: 1; }
+        }
+        .pulse-glow { animation: pulseGlow 2s infinite; }
+
+        @keyframes bumpAnim {
+            0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+            50% { transform: scale(1.3) rotate(5deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .bump-effect { animation: bumpAnim 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between font-sans">
+
+    <!-- CANVAS ANIMATED NEON BG -->
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toastContainer" class="fixed top-4 left-4 right-4 z-50 pointer-events-none flex flex-col gap-2 items-center"></div>
+
+    <!-- AUTHENTICATION / REGISTRATION SCREEN -->
+    <div id="authScreen" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-black/90 backdrop-blur-3xl overflow-y-auto">
+        <div class="w-full max-w-sm glass-island p-8 rounded-[2.5rem] shadow-island border border-white/10 text-center flex flex-col items-center relative z-10 my-auto">
+            
+            <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-zlm-pink via-zlm-purple to-zlm-cyan flex items-center justify-center mb-4 shadow-neon-pink pulse-glow">
+                <i class="fa-solid fa-bolt text-4xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-black tracking-wider bg-gradient-to-r from-zlm-pink via-zlm-purple to-zlm-cyan bg-clip-text text-transparent">ZLM VIBES</h1>
+            <p class="text-xs text-gray-400 mt-1 mb-6 font-semibold">Zenly & Blink Messenger</p>
+
+            <!-- AUTH SWITCH TABS -->
+            <div class="flex bg-black/40 p-1 rounded-2xl w-full mb-5 border border-white/5">
+                <button id="tabLoginBtn" onclick="switchAuthMode('login')" class="flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all bg-zlm-pink text-white shadow-neon-pink">Вход</button>
+                <button id="tabRegisterBtn" onclick="switchAuthMode('register')" class="flex-1 py-2.5 rounded-xl text-xs font-extrabold text-gray-400 hover:text-white transition-all">Регистрация</button>
+            </div>
+
+            <!-- FORM -->
+            <form id="authForm" onsubmit="handleAuth(event)" class="w-full flex flex-col gap-3">
+                <input type="text" id="authUsername" placeholder="Имя или Логин" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-zlm-pink text-white placeholder-gray-500 font-semibold">
+                <input type="password" id="authPassword" placeholder="Пароль" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-zlm-pink text-white placeholder-gray-500 font-semibold">
+
+                <!-- REGISTRATION AVATAR SELECTION -->
+                <div id="avatarSelectBox" class="hidden flex flex-col gap-2 my-1 text-left">
+                    <label class="text-xs font-bold text-gray-400 px-1">Выберите аватар или фото:</label>
+                    
+                    <!-- EMOJI PRESETS -->
+                    <div class="flex items-center justify-between bg-black/30 p-2 rounded-2xl border border-white/5">
+                        <button type="button" onclick="selectEmojiAvatar('🚀')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">🚀</button>
+                        <button type="button" onclick="selectEmojiAvatar('⚡')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">⚡</button>
+                        <button type="button" onclick="selectEmojiAvatar('🔥')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">🔥</button>
+                        <button type="button" onclick="selectEmojiAvatar('👾')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">👾</button>
+                        <button type="button" onclick="selectEmojiAvatar('👑')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">👑</button>
+                        <button type="button" onclick="selectEmojiAvatar('🦄')" class="emoji-btn text-2xl p-1 hover:scale-125 transition">🦄</button>
+                    </div>
+
+                    <!-- UPLOAD CUSTOM PHOTO -->
+                    <label class="w-full bg-white/5 hover:bg-white/10 border border-white/10 py-3 rounded-2xl cursor-pointer text-xs font-bold flex items-center justify-center gap-2 text-zlm-cyan transition">
+                        <i class="fa-solid fa-camera text-sm"></i>
+                        <span id="photoUploadLabel">Загрузить фото профиля</span>
+                        <input type="file" id="authPhotoInput" accept="image/*" class="hidden" onchange="handleAuthPhotoSelect(event)">
+                    </label>
+                </div>
+
+                <p id="authError" class="text-xs text-red-400 hidden font-bold mt-1"></p>
+
+                <button type="submit" id="authSubmitBtn" class="w-full mt-2 py-4 bg-gradient-to-r from-zlm-pink via-zlm-purple to-zlm-cyan font-black text-sm rounded-2xl shadow-neon-pink active:scale-95 transition-all text-white">
+                    Зайти в ZLM ⚡
+                </button>
+            </form>
+
+            <!-- ACCOUNTS SWITCHER -->
+            <div id="multiAccountSection" class="w-full mt-6 pt-4 border-t border-white/10 hidden">
+                <p class="text-[11px] font-bold text-gray-400 mb-2">Сохраненные аккаунты:</p>
+                <div id="savedAccountsList" class="flex flex-wrap gap-2 justify-center"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="mainApp" class="flex-1 flex flex-col h-full overflow-hidden relative max-w-md mx-auto w-full z-10 hidden">
+        
+        <!-- HEADER -->
+        <header class="p-4 flex items-center justify-between z-10">
+            <div class="flex items-center gap-3">
+                <div onclick="openProfileDrawer(currentUser)" class="relative cursor-pointer active:scale-95 transition">
+                    <div id="myAvatarDisplay" class="w-12 h-12 rounded-full bg-gradient-to-tr from-zlm-pink to-zlm-cyan flex items-center justify-center text-2xl shadow-neon-pink overflow-hidden border-2 border-white/20">🚀</div>
+                </div>
+                <div>
+                    <h2 id="myUsernameDisplay" class="font-black text-base tracking-wide flex items-center gap-1.5">...</h2>
+                    <p id="myZmIdDisplay" class="text-[11px] font-mono text-zlm-cyan font-bold">ZLM-00000000</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="switchTab('search')" class="w-10 h-10 rounded-2xl glass-island flex items-center justify-center text-zlm-pink border border-zlm-pink/30 hover:bg-zlm-pink/20 active:scale-90 transition">
+                    <i class="fa-solid fa-user-plus text-base"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN TAB CONTENT -->
+        <main class="flex-1 relative overflow-hidden px-4 pb-24">
+            
+            <!-- CHATS TAB -->
+            <section id="chatsTab" class="absolute inset-0 px-4 overflow-y-auto custom-scrollbar flex flex-col gap-3 pb-28">
+                
+                <!-- PUBLIC GLOBAL CHAT ITEM -->
+                <div onclick="openChat('global', '🌐 Общий чат ZLM', '🌐')" class="glass-island p-4 rounded-[2rem] flex items-center justify-between border-2 border-zlm-purple/40 hover:border-zlm-pink transition-all active:scale-98 cursor-pointer shadow-neon-purple">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-13 h-13 w-12 h-12 rounded-full bg-gradient-to-tr from-zlm-purple via-zlm-pink to-zlm-cyan flex items-center justify-center text-2xl shadow-neon-pink">🌐</div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-extrabold text-sm text-white">Общий чат ZLM</h3>
+                                <span class="bg-zlm-pink text-white text-[9px] font-black px-2 py-0.5 rounded-full tracking-wider uppercase shadow-neon-pink">PUBLIC</span>
+                            </div>
+                            <p id="globalChatLastMsg" class="text-xs text-gray-400 mt-0.5 truncate max-w-[180px] font-medium">Общайся со всеми в сети...</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-xs text-gray-500"></i>
+                </div>
+
+                <!-- FRIEND REQUESTS NOTIFICATION BANNER -->
+                <div id="requestsBox" class="hidden flex flex-col gap-2 mt-2">
+                    <div class="flex items-center justify-between px-2">
+                        <h4 class="text-xs font-black text-zlm-pink tracking-wider">ВХОДЯЩИЕ ЗАПРОСЫ</h4>
+                        <span id="requestsBadge" class="bg-zlm-pink text-white text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
+                    </div>
+                    <div id="requestsList" class="flex flex-col gap-2"></div>
+                </div>
+
+                <!-- FRIENDS CHATS HEADER -->
+                <div class="text-xs font-black text-gray-400 mt-2 px-2 flex items-center justify-between tracking-wider">
+                    <span>ЛИЧНЫЕ ДРУЗЬЯ</span>
+                    <span id="friendsCount" class="text-zlm-cyan font-mono">0</span>
+                </div>
+
+                <!-- FRIENDS CHATS LIST -->
+                <div id="chatsList" class="flex flex-col gap-2">
+                    <div class="text-center text-xs text-gray-500 py-10 font-semibold">У вас пока нет друзей. Найдите их через вкладку Поиск 🔍</div>
+                </div>
+            </section>
+
+            <!-- SEARCH TAB -->
+            <section id="searchTab" class="absolute inset-0 px-4 overflow-y-auto custom-scrollbar hidden flex-col gap-4 pb-28">
+                <div class="glass-island p-2 rounded-2xl flex items-center gap-3 border border-white/10">
+                    <i class="fa-solid fa-magnifying-glass text-gray-400 ml-3"></i>
+                    <input type="text" id="searchInput" oninput="performSearch()" placeholder="Поиск по Имени или ZM ID..." class="bg-transparent w-full py-2.5 text-sm text-white focus:outline-none font-semibold placeholder-gray-500">
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center justify-between px-1">
+                        <h4 class="text-xs font-black text-gray-400 tracking-wider">ПОЛЬЗОВАТЕЛИ СЕТИ</h4>
+                        <div class="flex items-center gap-3">
+                            <button onclick="showAllUsers()" class="text-[11px] font-bold text-zlm-cyan">Все пользователи</button>
+                            <button onclick="renderAllUsersList()" class="text-[11px] font-bold text-zlm-cyan">Обновить</button>
+                        </div>
+                    </div>
+                    <div id="searchResults" class="flex flex-col gap-2"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- BOTTOM NAVIGATION -->
+        <nav class="absolute bottom-4 left-4 right-4 h-16 glass-island rounded-[2.5rem] flex items-center justify-around px-6 border border-white/15 shadow-island z-20">
+            <button onclick="switchTab('chats')" id="navChatsBtn" class="flex flex-col items-center gap-1 text-zlm-pink transition">
+                <i class="fa-solid fa-comments text-lg"></i>
+                <span class="text-[10px] font-extrabold tracking-wider">Чаты</span>
+            </button>
+            <button onclick="switchTab('search')" id="navSearchBtn" class="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition">
+                <i class="fa-solid fa-compass text-lg"></i>
+                <span class="text-[10px] font-extrabold tracking-wider">Поиск</span>
+            </button>
+            <button onclick="openProfileDrawer(currentUser)" class="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition">
+                <i class="fa-solid fa-user text-lg"></i>
+                <span class="text-[10px] font-extrabold tracking-wider">Профиль</span>
+            </button>
+        </nav>
+
+        <!-- FULLSCREEN CHAT OVERLAY -->
+        <div id="chatOverlay" class="fixed inset-0 z-40 bg-black/95 flex flex-col hidden backdrop-blur-2xl">
+            
+            <!-- CHAT HEADER -->
+            <div class="p-4 glass-island rounded-b-3xl flex items-center justify-between border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <button onclick="closeChat()" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white active:scale-90 transition">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
+                    <div class="flex items-center gap-3">
+                        <div id="chatActiveAvatar" class="w-10 h-10 rounded-full bg-zlm-purple flex items-center justify-center text-xl overflow-hidden border border-white/20">👤</div>
+                        <div>
+                            <h3 id="chatActiveName" class="font-extrabold text-sm text-white">Имя Пользователя</h3>
+                            <p id="chatActiveStatus" class="text-[10px] text-zlm-lime font-bold">В сети 🔥</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CALL BUTTONS -->
+                <div class="flex items-center gap-2">
+                    <button onclick="triggerCallModal('audio')" class="w-10 h-10 rounded-2xl bg-zlm-lime/20 text-zlm-lime border border-zlm-lime/30 flex items-center justify-center active:scale-90 transition">
+                        <i class="fa-solid fa-phone"></i>
+                    </button>
+                    <button onclick="triggerCallModal('video')" class="w-10 h-10 rounded-2xl bg-zlm-cyan/20 text-zlm-cyan border border-zlm-cyan/30 flex items-center justify-center active:scale-90 transition">
+                        <i class="fa-solid fa-video"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MESSAGES CONTAINER -->
+            <div id="messagesContainer" class="flex-1 p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3"></div>
+
+            <!-- BUMP EMOJI OVERLAY ANIMATION -->
+            <div id="bumpOverlay" class="absolute inset-0 pointer-events-none flex items-center justify-center hidden">
+                <div id="bumpEmojiDisplay" class="text-9xl bump-effect">⚡</div>
+            </div>
+
+            <!-- CHAT INPUT PANEL -->
+            <div class="p-3 glass-island rounded-t-3xl flex flex-col gap-2 border-t border-white/10">
+                
+                <!-- BUMP EMOJI QUICK BAR -->
+                <div class="flex items-center justify-between px-2 pt-1 border-b border-white/5 pb-2">
+                    <span class="text-[10px] font-bold text-gray-400">Быстрый БАМП ⚡:</span>
+                    <div class="flex items-center gap-3">
+                        <button onclick="sendBump('⚡')" class="text-xl hover:scale-130 active:scale-90 transition">⚡</button>
+                        <button onclick="sendBump('🔥')" class="text-xl hover:scale-130 active:scale-90 transition">🔥</button>
+                        <button onclick="sendBump('❤️')" class="text-xl hover:scale-130 active:scale-90 transition">❤️</button>
+                        <button onclick="sendBump('💩')" class="text-xl hover:scale-130 active:scale-90 transition">💩</button>
+                        <button onclick="sendBump('🎉')" class="text-xl hover:scale-130 active:scale-90 transition">🎉</button>
+                    </div>
+                </div>
+
+                <!-- INPUT BAR -->
+                <div class="flex items-center gap-2 pt-1">
+                    
+                    <!-- ATTACH PHOTO / MEDIA -->
+                    <label class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-zlm-cyan cursor-pointer active:scale-90 transition">
+                        <i class="fa-solid fa-image"></i>
+                        <input type="file" accept="image/*" class="hidden" onchange="sendPhotoMessage(event)">
+                    </label>
+
+                    <!-- VIDEO CIRCLE RECORD -->
+                    <button id="videoNoteBtn" onclick="toggleVideoCircleRecord()" class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-zlm-pink active:scale-90 transition">
+                        <i class="fa-solid fa-circle-dot"></i>
+                    </button>
+
+                    <!-- AUDIO RECORD -->
+                    <button id="audioRecordBtn" onclick="toggleAudioRecord()" class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-zlm-yellow active:scale-90 transition">
+                        <i class="fa-solid fa-microphone"></i>
+                    </button>
+
+                    <!-- TEXT INPUT -->
+                    <input type="text" id="chatMessageInput" onkeypress="if(event.key==='Enter') sendTextMessage()" placeholder="Сообщение..." class="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 py-2.5 text-sm text-white focus:outline-none font-semibold">
+
+                    <!-- SEND BUTTON -->
+                    <button onclick="sendTextMessage()" class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-zlm-pink to-zlm-purple flex items-center justify-center text-white shadow-neon-pink active:scale-90 transition">
+                        <i class="fa-solid fa-paper-plane text-sm"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PROFILE DRAWER SLIDE-UP -->
+        <div id="profileDrawer" class="swipe-drawer fixed inset-x-0 bottom-0 z-50 bg-zlm-bg/95 border-t border-white/20 rounded-t-[3rem] p-6 backdrop-blur-3xl transition-transform duration-300 transform translate-y-full flex flex-col items-center max-w-md mx-auto">
+            <div class="w-16 h-1.5 bg-white/30 rounded-full mb-6 cursor-pointer" onclick="closeProfileDrawer()"></div>
+            
+            <div id="drawerAvatar" class="w-24 h-24 rounded-full bg-gradient-to-tr from-zlm-pink to-zlm-cyan flex items-center justify-center text-5xl shadow-neon-pink overflow-hidden mb-4 border-2 border-white/20">🚀</div>
+            <h2 id="drawerUsername" class="text-2xl font-black text-white mb-1">Имя</h2>
+            <span id="drawerZmId" class="text-xs font-mono text-zlm-cyan mb-6 font-bold">ZLM-00000000</span>
+
+            <!-- ACCOUNTS LIST -->
+            <div class="w-full bg-black/40 p-4 rounded-3xl border border-white/10 mb-6">
+                <p class="text-xs font-bold text-gray-400 mb-3 text-left">Ваши переключаемые аккаунты:</p>
+                <div id="drawerAccountsList" class="flex flex-col gap-2"></div>
+            </div>
+
+            <button onclick="logout()" class="w-full py-4 bg-red-500/20 text-red-400 font-extrabold text-sm rounded-2xl border border-red-500/30 hover:bg-red-500/30 active:scale-95 transition">
+                Выйти из текущего аккаунта
+            </button>
+        </div>
+
+        <!-- CALL MODAL -->
+        <div id="callModal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-between p-10 hidden">
+            <div class="flex flex-col items-center gap-3 mt-10">
+                <div id="callTargetAvatar" class="w-28 h-28 rounded-full bg-zlm-purple flex items-center justify-center text-5xl shadow-neon-pink pulse-glow border-4 border-white/20">👤</div>
+                <h3 id="callTargetName" class="text-2xl font-black text-white">Вызов...</h3>
+                <p id="callStatusText" class="text-xs text-zlm-cyan font-bold tracking-widest uppercase">Звонок в ZLM Network</p>
+            </div>
+
+            <div class="relative w-full max-w-xs h-64 bg-white/5 rounded-3xl overflow-hidden border border-white/10 flex items-center justify-center">
+                <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+                <video id="localVideo" autoplay playsinline muted class="absolute bottom-3 right-3 w-24 h-32 object-cover rounded-2xl border-2 border-white/30 shadow-lg"></video>
+            </div>
+
+            <button onclick="endRealCall()" class="w-20 h-20 rounded-full bg-red-600 text-white text-2xl flex items-center justify-center shadow-lg active:scale-90 transition mb-6">
+                <i class="fa-solid fa-phone-slash"></i>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // FIREBASE INITIALIZATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyAqoDH3vLDW_wZz-5PW3tVcKn0iJ16Qa_Y",
+            authDomain: "realzlem.firebaseapp.com",
+            projectId: "realzlem",
+            // ВАЖНО: скопируй точный URL из Firebase Console → Realtime Database (вверху вкладки «Данные»).
+            // Для региона США он такой, для Европы/Азии будет другой (…europe-west1.firebasedatabase.app и т.п.)
+            databaseURL: "https://realzlem-default-rtdb.firebaseio.com",
+            storageBucket: "realzlem.firebasestorage.app",
+            messagingSenderId: "716214625402",
+            appId: "1:716214625402:web:3e5eac373020dc3c6c07c3"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Проверка связи с Realtime Database (если databaseURL неверный — покажем понятную ошибку)
+        let dbEverConnected = false;
+        db.ref('.info/connected').on('value', s => { if (s.val() === true) dbEverConnected = true; });
+        setTimeout(() => {
+            if (!dbEverConnected) showToast("Нет связи с Realtime Database. Проверь databaseURL в начале файла");
+        }, 10000);
+
+        function withTimeout(promise, ms = 12000) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => setTimeout(() => reject({ code: 'timeout', message: 'нет ответа от базы' }), ms))
+            ]);
+        }
+
+        // RTDB хранит списки как объекты {id: true}; приводим к массивам id
+        function toIdList(v) {
+            if (!v) return [];
+            if (Array.isArray(v)) return v.filter(x => typeof x === 'string' && x);
+            if (typeof v === 'object') {
+                return Object.entries(v)
+                    .map(([k, val]) => val === true ? k : (typeof val === 'string' ? val : null))
+                    .filter(Boolean);
+            }
+            return [];
+        }
+
+        function normalizeUser(u) {
+            return { ...u, friends: toIdList(u.friends), requests: toIdList(u.requests), sent: toIdList(u.sent) };
+        }
+
+        function userRef(id) { return db.ref('users/' + id); }
+
+        function chatPath() {
+            return activeChatId === 'global' ? 'global_chat' : 'chats/' + [currentUser.id, activeChatId].sort().join('_');
+        }
+
+        // FIREBASE ANONYMOUS AUTH (нужен, т.к. правила Realtime Database требуют auth != null)
+        let authPromise = null;
+        function ensureAuth() {
+            if (!firebase.auth) return Promise.resolve(null);
+            if (authPromise) return authPromise;
+            authPromise = new Promise(resolve => {
+                const unsub = firebase.auth().onAuthStateChanged(async user => {
+                    unsub();
+                    if (user) { resolve(user); return; }
+                    try {
+                        const cred = await firebase.auth().signInAnonymously();
+                        resolve(cred.user);
+                    } catch (err) {
+                        console.error('Anonymous auth error:', err);
+                        authPromise = null;
+                        if (err && err.code === 'auth/operation-not-allowed' || err && err.code === 'auth/admin-restricted-operation') {
+                            showToast("Включи Anonymous в Firebase: Authentication → Sign-in method");
+                        } else {
+                            showToast("Ошибка Firebase Auth: " + ((err && (err.code || err.message)) || 'неизвестная'));
+                        }
+                        resolve(null);
+                    }
+                });
+            });
+            return authPromise;
+        }
+
+        // APP STATE
+        let authMode = 'login';
+        let customAvatarUrl = '🚀';
+        let currentUser = null;
+        let activeChatId = null;
+
+        // MEDIA RECORDING STATE
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecordingVideo = false;
+        let isRecordingAudio = false;
+
+        // WEBRTC CALL STATE
+        let localStream = null;
+
+        // TOAST SYSTEM
+        function showToast(text) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = "toast-animate glass-island px-5 py-3 rounded-2xl border border-zlm-pink/40 shadow-neon-pink text-xs font-extrabold text-white";
+            toast.innerText = text;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 2800);
+        }
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            initLiveBackground();
+            renderSavedAccounts();
+
+            const cachedUser = localStorage.getItem('zlm_current_user');
+            if (cachedUser) {
+                currentUser = JSON.parse(cachedUser);
+                ensureAuth().then(() => initApp());
+            } else {
+                document.getElementById('authScreen').classList.remove('hidden');
+                ensureAuth();
+            }
+
+            // Android Hardware Back Button Close Overlays
+            window.addEventListener('popstate', () => {
+                closeChat();
+                closeProfileDrawer();
+            });
+        });
+
+        // AUTH TAB SWITCHING
+        function switchAuthMode(mode) {
+            authMode = mode;
+            document.getElementById('tabLoginBtn').className = mode === 'login' ? 'flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all bg-zlm-pink text-white shadow-neon-pink' : 'flex-1 py-2.5 rounded-xl text-xs font-extrabold text-gray-400 hover:text-white transition-all';
+            document.getElementById('tabRegisterBtn').className = mode === 'register' ? 'flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all bg-zlm-pink text-white shadow-neon-pink' : 'flex-1 py-2.5 rounded-xl text-xs font-extrabold text-gray-400 hover:text-white transition-all';
+            document.getElementById('avatarSelectBox').classList.toggle('hidden', mode === 'login');
+            document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Зайти в ZLM ⚡' : 'Создать аккаунт 🚀';
+        }
+
+        function selectEmojiAvatar(emoji) {
+            customAvatarUrl = emoji;
+            showToast(`Аватар выбран: ${emoji}`);
+        }
+
+        function handleAuthPhotoSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    customAvatarUrl = ev.target.result;
+                    document.getElementById('photoUploadLabel').innerText = "Фото выбрано ✓";
+                    showToast("Фото профиля готово к загрузке!");
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // MULTI-ACCOUNT STORAGE & HANDLER
+        function getSavedAccounts() {
+            return JSON.parse(localStorage.getItem('zlm_multi_accounts') || '[]');
+        }
+
+        function saveAccountToMulti(user) {
+            let accounts = getSavedAccounts();
+            accounts = accounts.filter(a => a.id !== user.id);
+            accounts.push(user);
+            localStorage.setItem('zlm_multi_accounts', JSON.stringify(accounts));
+            renderSavedAccounts();
+        }
+
+        function renderSavedAccounts() {
+            const accounts = getSavedAccounts();
+            const container = document.getElementById('savedAccountsList');
+            const drawerContainer = document.getElementById('drawerAccountsList');
+            const section = document.getElementById('multiAccountSection');
+
+            if (accounts.length === 0) {
+                section.classList.add('hidden');
+                if (drawerContainer) drawerContainer.innerHTML = '<span class="text-xs text-gray-500">Нет сохраненных аккаунтов</span>';
+                return;
+            }
+
+            section.classList.remove('hidden');
+            container.innerHTML = '';
+            if (drawerContainer) drawerContainer.innerHTML = '';
+
+            accounts.forEach(acc => {
+                // Auth Screen Badges
+                const btn = document.createElement('button');
+                btn.className = "px-3 py-1.5 rounded-xl glass-card text-xs font-bold flex items-center gap-2 hover:border-zlm-pink transition";
+                btn.onclick = () => switchToAccount(acc);
+                btn.innerHTML = `<span>${acc.username}</span>`;
+                container.appendChild(btn);
+
+                // Drawer List
+                if (drawerContainer) {
+                    const dItem = document.createElement('div');
+                    dItem.className = `p-2.5 rounded-2xl flex items-center justify-between glass-island cursor-pointer ${currentUser && currentUser.id === acc.id ? 'border border-zlm-pink' : ''}`;
+                    dItem.onclick = () => switchToAccount(acc);
+                    dItem.innerHTML = `<span class="text-xs font-bold text-white">${acc.username}</span> <span class="text-[10px] text-zlm-cyan font-mono">${acc.zmId}</span>`;
+                    drawerContainer.appendChild(dItem);
+                }
+            });
+        }
+
+        function switchToAccount(acc) {
+            currentUser = acc;
+            localStorage.setItem('zlm_current_user', JSON.stringify(currentUser));
+            showToast(`Переключено на: ${acc.username}`);
+            initApp();
+            closeProfileDrawer();
+        }
+
+        // AUTHENTICATION LOGIC
+        async function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('authUsername').value.trim();
+            const password = document.getElementById('authPassword').value.trim();
+            const errorEl = document.getElementById('authError');
+            errorEl.classList.add('hidden');
+
+            try {
+                await ensureAuth();
+                if (authMode === 'register') {
+                    // Check if username taken
+                    const check = await withTimeout(db.ref('users').orderByChild('username').equalTo(username).once('value'));
+                    if (check.exists()) {
+                        errorEl.innerText = "Имя уже занято!";
+                        errorEl.classList.remove('hidden');
+                        return;
+                    }
+
+                    const newUser = {
+                        username: username,
+                        password: password,
+                        zmId: `ZLM-${Math.floor(10000000 + Math.random() * 90000000)}`,
+                        avatar: customAvatarUrl || '🚀',
+                        friends: [],
+                        requests: [],
+                        sent: []
+                    };
+
+                    const newRef = db.ref('users').push();
+                    await withTimeout(newRef.set({
+                        username: newUser.username,
+                        password: newUser.password,
+                        zmId: newUser.zmId,
+                        avatar: newUser.avatar
+                    }));
+                    newUser.id = newRef.key;
+                    currentUser = newUser;
+
+                    showToast("Регистрация успешна!");
+                } else {
+                    const snap = await withTimeout(db.ref('users').orderByChild('username').equalTo(username).once('value'));
+                    let found = null;
+                    snap.forEach(ch => {
+                        const v = ch.val();
+                        if (!found && v && v.password === password) found = { id: ch.key, ...v };
+                    });
+                    if (!found) {
+                        errorEl.innerText = "Неверное имя или пароль!";
+                        errorEl.classList.remove('hidden');
+                        return;
+                    }
+
+                    currentUser = normalizeUser(found);
+                    showToast("Успешный вход!");
+                }
+
+                saveAccountToMulti(currentUser);
+                localStorage.setItem('zlm_current_user', JSON.stringify(currentUser));
+                initApp();
+            } catch (err) {
+                console.error(err);
+                errorEl.innerText = "Ошибка сервера: " + friendErrorText(err) + " (проверь databaseURL и правила Realtime Database)";
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        // INIT APP STATE
+        function initApp() {
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+
+            document.getElementById('myUsernameDisplay').innerText = currentUser.username;
+            document.getElementById('myZmIdDisplay').innerText = currentUser.zmId;
+            renderAvatar(document.getElementById('myAvatarDisplay'), currentUser.avatar);
+
+            loadFriendsAndChats();
+            listenToGlobalChat();
+            listenToRequests();
+            renderAllUsersList();
+        }
+
+        function renderAvatar(el, avatar) {
+            if (avatar && avatar.startsWith('data:image')) {
+                el.innerHTML = `<img src="${avatar}" class="w-full h-full object-cover">`;
+            } else {
+                el.innerText = avatar || '🚀';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('zlm_current_user');
+            location.reload();
+        }
+
+        // TAB NAVIGATION
+        function switchTab(tab) {
+            document.getElementById('chatsTab').classList.toggle('hidden', tab !== 'chats');
+            document.getElementById('searchTab').classList.toggle('hidden', tab !== 'search');
+
+            document.getElementById('navChatsBtn').className = tab === 'chats' ? 'flex flex-col items-center gap-1 text-zlm-pink transition' : 'flex flex-col items-center gap-1 text-gray-400 hover:text-white transition';
+            document.getElementById('navSearchBtn').className = tab === 'search' ? 'flex flex-col items-center gap-1 text-zlm-pink transition' : 'flex flex-col items-center gap-1 text-gray-400 hover:text-white transition';
+
+            if (tab === 'search') renderAllUsersList();
+        }
+
+        // FRIENDS & REQUESTS SYSTEM
+        let selfUnsub = null;
+        let requestsRenderToken = 0;
+        let friendsRenderToken = 0;
+
+        function friendAvatarHtml(avatar, imgClass) {
+            if (avatar && String(avatar).startsWith('data:')) {
+                return `<img src="${avatar}" class="${imgClass}">`;
+            }
+            return avatar || '🚀';
+        }
+
+        function persistCurrentUser() {
+            localStorage.setItem('zlm_current_user', JSON.stringify(currentUser));
+            try { saveAccountToMulti(currentUser); } catch (e) { console.error(e); }
+        }
+
+        function friendErrorText(err) {
+            return (err && (err.code || err.message)) ? (err.code || err.message) : 'неизвестная ошибка';
+        }
+
+        function normalizeSearch(s) {
+            return String(s || '').toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
+        }
+
+        function buildUserRow(id, data) {
+            const friends = currentUser.friends || [];
+            const sent = currentUser.sent || [];
+            const incoming = currentUser.requests || [];
+            const isFriend = friends.includes(id);
+            const isSent = sent.includes(id);
+            const isIncoming = incoming.includes(id);
+
+            const item = document.createElement('div');
+            item.className = "glass-island p-3.5 rounded-2xl flex items-center justify-between border border-white/10";
+            item.dataset.uid = id;
+            item.dataset.name = normalizeSearch(data.username);
+            item.dataset.zm = normalizeSearch(data.zmId);
+            item.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-zlm-purple/30 flex items-center justify-center text-xl overflow-hidden border border-white/20">
+                        ${friendAvatarHtml(data.avatar, 'w-full h-full object-cover')}
+                    </div>
+                    <div>
+                        <h4 class="font-extrabold text-sm text-white">${escapeHtml(String(data.username || ''))}</h4>
+                        <p class="text-[10px] font-mono text-zlm-cyan font-bold">${escapeHtml(String(data.zmId || ''))}</p>
+                    </div>
+                </div>
+            `;
+
+            const btn = document.createElement('button');
+            if (isFriend) {
+                btn.className = "bg-white/10 text-gray-400 text-xs font-extrabold px-3.5 py-2 rounded-xl cursor-default";
+                btn.innerText = "В друзьях";
+            } else if (isSent) {
+                btn.className = "bg-white/10 text-gray-400 text-xs font-extrabold px-3.5 py-2 rounded-xl cursor-default";
+                btn.innerText = "Запрос отправлен";
+            } else if (isIncoming) {
+                btn.className = "bg-zlm-lime text-black text-xs font-black px-4 py-2 rounded-xl active:scale-95 transition";
+                btn.innerText = "Принять";
+                btn.onclick = () => acceptRequest(id);
+            } else {
+                btn.className = "bg-gradient-to-r from-zlm-pink to-zlm-purple text-white text-xs font-black px-4 py-2 rounded-xl active:scale-95 transition shadow-neon-pink";
+                btn.innerText = "+ Добавить";
+                btn.onclick = () => sendFriendRequest(id, btn);
+            }
+            item.appendChild(btn);
+            return item;
+        }
+
+        function showAllUsers() {
+            document.getElementById('searchInput').value = '';
+            renderAllUsersList();
+        }
+
+        async function renderAllUsersList() {
+            const container = document.getElementById('searchResults');
+            container.innerHTML = '<p class="text-center text-xs text-gray-500 py-4 font-bold">Поиск в сети...</p>';
+
+            let snap;
+            try {
+                await ensureAuth();
+                snap = await withTimeout(db.ref('users').once('value'));
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = '<p class="text-center text-xs text-red-400 py-4 font-bold">Не удалось загрузить пользователей: ' + escapeHtml(friendErrorText(err)) + '</p>';
+                showToast("Ошибка загрузки: " + friendErrorText(err));
+                return;
+            }
+            container.innerHTML = '<p id="searchStatus" class="text-center text-[11px] text-gray-500 py-1 font-bold"></p>';
+
+            snap.forEach(ch => {
+                const v = ch.val();
+                if (ch.key === currentUser.id || !v || !v.username) return;
+                container.appendChild(buildUserRow(ch.key, v));
+            });
+
+            performSearch();
+        }
+
+        let searchLookupTimer = null;
+
+        function performSearch() {
+            const raw = document.getElementById('searchInput').value.trim();
+            const q = normalizeSearch(raw);
+            const items = document.querySelectorAll('#searchResults > div');
+            let shown = 0;
+            items.forEach(item => {
+                const match = !q || (item.dataset.name || '').includes(q) || (item.dataset.zm || '').includes(q);
+                item.style.display = match ? 'flex' : 'none';
+                if (match) shown++;
+            });
+
+            const status = document.getElementById('searchStatus');
+            if (status) {
+                if (items.length === 0) {
+                    status.innerText = 'В сети пока нет других пользователей';
+                } else if (shown === 0) {
+                    status.innerText = 'Ничего не найдено — ищу точное совпадение...';
+                } else {
+                    status.innerText = q ? `Найдено: ${shown} из ${items.length}` : `Всего пользователей: ${items.length}`;
+                }
+            }
+
+            clearTimeout(searchLookupTimer);
+            if (q && shown === 0) {
+                searchLookupTimer = setTimeout(() => lookupExactUser(raw), 400);
+            }
+        }
+
+        // Точный поиск прямо в Firebase по ZM ID или имени (если в списке не нашлось)
+        async function lookupExactUser(raw) {
+            const container = document.getElementById('searchResults');
+            const status = document.getElementById('searchStatus');
+            if (!raw || !container || !currentUser) return;
+
+            const digits = raw.replace(/\D/g, '');
+            const zmCandidates = new Set([raw.toUpperCase()]);
+            if (digits.length >= 6) zmCandidates.add('ZLM-' + digits);
+
+            const found = new Map();
+            try {
+                await ensureAuth();
+                const queries = [...zmCandidates].map(z => withTimeout(db.ref('users').orderByChild('zmId').equalTo(z).once('value')));
+                queries.push(withTimeout(db.ref('users').orderByChild('username').equalTo(raw).once('value')));
+                const results = await Promise.all(queries);
+                results.forEach(r => {
+                    r.forEach(ch => {
+                        if (ch.key !== currentUser.id) found.set(ch.key, ch.val());
+                    });
+                });
+            } catch (err) {
+                console.error(err);
+                if (status) status.innerText = 'Ошибка поиска: ' + friendErrorText(err);
+                return;
+            }
+
+            // запрос мог измениться, пока шёл поиск
+            if (document.getElementById('searchInput').value.trim() !== raw) return;
+
+            found.forEach((data, id) => {
+                if (!container.querySelector(`[data-uid="${id}"]`)) {
+                    container.appendChild(buildUserRow(id, data));
+                }
+            });
+
+            if (found.size > 0) {
+                performSearch();
+            } else if (status) {
+                status.innerText = 'Пользователь не найден';
+            }
+        }
+
+        async function sendFriendRequest(targetId, btn) {
+            if (!currentUser || targetId === currentUser.id) return;
+
+            const friends = currentUser.friends || [];
+            const sent = currentUser.sent || [];
+            const incoming = currentUser.requests || [];
+
+            if (friends.includes(targetId)) { showToast("Вы уже друзья!"); return; }
+            if (sent.includes(targetId)) { showToast("Запрос уже отправлен!"); return; }
+            // Этот человек уже отправил запрос нам — просто принимаем
+            if (incoming.includes(targetId)) { await acceptRequest(targetId); return; }
+
+            if (btn) { btn.disabled = true; btn.innerText = "..."; }
+
+            try {
+                const updates = {};
+                updates[`users/${targetId}/requests/${currentUser.id}`] = true;
+                updates[`users/${currentUser.id}/sent/${targetId}`] = true;
+                await withTimeout(db.ref().update(updates));
+
+                currentUser.sent = [...sent, targetId];
+                persistCurrentUser();
+                showToast("Запрос отправлен!");
+            } catch (err) {
+                console.error(err);
+                showToast("Не удалось отправить запрос: " + friendErrorText(err));
+            }
+            renderAllUsersList();
+        }
+
+        // Единый realtime-слушатель собственного профиля:
+        // обновляет друзей, входящие и исходящие запросы у обеих сторон
+        function listenToRequests() {
+            if (selfUnsub) { selfUnsub(); selfUnsub = null; }
+            const myId = currentUser.id;
+            const ref = userRef(myId);
+            let prevFriendsKey = null;
+            let restored = false;
+
+            const cb = snap => {
+                if (!currentUser || currentUser.id !== myId) return;
+
+                if (!snap.exists()) {
+                    // Аккаунт был сохранён на устройстве, но записи в Realtime Database ещё нет — создаём её
+                    if (!restored && currentUser.username) {
+                        restored = true;
+                        ref.set({
+                            username: currentUser.username,
+                            password: currentUser.password || '',
+                            zmId: currentUser.zmId,
+                            avatar: currentUser.avatar || '🚀'
+                        }).catch(err => {
+                            console.error(err);
+                            showToast("Не удалось создать профиль в базе: " + friendErrorText(err));
+                        });
+                    }
+                    return;
+                }
+
+                const data = snap.val() || {};
+                currentUser = normalizeUser({
+                    ...currentUser,
+                    ...data,
+                    id: myId,
+                    friends: data.friends,
+                    requests: data.requests,
+                    sent: data.sent
+                });
+                persistCurrentUser();
+
+                renderRequests(currentUser.requests);
+
+                const friendsKey = currentUser.friends.join(',');
+                if (friendsKey !== prevFriendsKey) {
+                    prevFriendsKey = friendsKey;
+                    loadFriendsAndChats();
+                }
+
+                if (!document.getElementById('searchTab').classList.contains('hidden')) {
+                    renderAllUsersList();
+                }
+            };
+
+            ref.on('value', cb, err => {
+                console.error(err);
+                showToast("Ошибка синхронизации друзей: " + friendErrorText(err));
+            });
+            selfUnsub = () => ref.off('value', cb);
+        }
+
+        async function renderRequests(requests) {
+            const box = document.getElementById('requestsBox');
+            const list = document.getElementById('requestsList');
+            const badge = document.getElementById('requestsBadge');
+            const token = ++requestsRenderToken;
+
+            badge.innerText = requests.length;
+
+            if (requests.length === 0) {
+                list.innerHTML = '';
+                box.classList.add('hidden');
+                return;
+            }
+
+            let docs = [];
+            try {
+                docs = await Promise.all(requests.map(id => userRef(id).once('value')));
+            } catch (err) {
+                console.error(err);
+                return;
+            }
+            if (token !== requestsRenderToken) return; // пришло более новое обновление
+
+            const frag = document.createDocumentFragment();
+            docs.forEach(uDoc => {
+                if (!uDoc.exists()) return;
+                const uData = uDoc.val() || {};
+                const reqId = uDoc.key;
+
+                const item = document.createElement('div');
+                item.className = "glass-island p-3 rounded-2xl flex items-center justify-between border border-zlm-pink/40 shadow-neon-pink";
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-zlm-purple flex items-center justify-center text-sm overflow-hidden">${friendAvatarHtml(uData.avatar, 'w-full h-full object-cover rounded-full')}</div>
+                        <span class="text-xs font-extrabold text-white">${escapeHtml(String(uData.username || ''))}</span>
+                    </div>
+                `;
+
+                const actBox = document.createElement('div');
+                actBox.className = "flex items-center gap-2";
+
+                const acceptBtn = document.createElement('button');
+                acceptBtn.className = "bg-zlm-lime text-black font-black text-[10px] px-3 py-1.5 rounded-xl active:scale-95 transition";
+                acceptBtn.innerText = "Принять";
+                acceptBtn.onclick = () => { acceptBtn.disabled = true; acceptRequest(reqId); };
+
+                const declineBtn = document.createElement('button');
+                declineBtn.className = "bg-white/10 text-gray-300 font-black text-[10px] px-3 py-1.5 rounded-xl active:scale-95 transition";
+                declineBtn.innerText = "Отклонить";
+                declineBtn.onclick = () => { declineBtn.disabled = true; declineRequest(reqId); };
+
+                actBox.appendChild(acceptBtn);
+                actBox.appendChild(declineBtn);
+                item.appendChild(actBox);
+                frag.appendChild(item);
+            });
+
+            list.innerHTML = '';
+            list.appendChild(frag);
+            box.classList.toggle('hidden', !list.children.length);
+        }
+
+        async function acceptRequest(friendId) {
+            try {
+                const me = currentUser.id;
+                const updates = {};
+                updates[`users/${me}/friends/${friendId}`] = true;
+                updates[`users/${me}/requests/${friendId}`] = null;
+                updates[`users/${me}/sent/${friendId}`] = null;
+                updates[`users/${friendId}/friends/${me}`] = true;
+                updates[`users/${friendId}/sent/${me}`] = null;
+                updates[`users/${friendId}/requests/${me}`] = null;
+                await withTimeout(db.ref().update(updates));
+
+                // Локальное состояние
+                currentUser.friends = Array.from(new Set([...(currentUser.friends || []), friendId]));
+                currentUser.requests = (currentUser.requests || []).filter(id => id !== friendId);
+                currentUser.sent = (currentUser.sent || []).filter(id => id !== friendId);
+                persistCurrentUser();
+
+                showToast("Запрос принят!");
+                renderRequests(currentUser.requests);
+                loadFriendsAndChats();
+                if (!document.getElementById('searchTab').classList.contains('hidden')) renderAllUsersList();
+            } catch (err) {
+                console.error(err);
+                showToast("Не удалось принять запрос: " + friendErrorText(err));
+            }
+        }
+
+        async function declineRequest(friendId) {
+            try {
+                const me = currentUser.id;
+                const updates = {};
+                updates[`users/${me}/requests/${friendId}`] = null;
+                updates[`users/${friendId}/sent/${me}`] = null;
+                await withTimeout(db.ref().update(updates));
+
+                currentUser.requests = (currentUser.requests || []).filter(id => id !== friendId);
+                persistCurrentUser();
+
+                showToast("Запрос отклонён");
+                renderRequests(currentUser.requests);
+                if (!document.getElementById('searchTab').classList.contains('hidden')) renderAllUsersList();
+            } catch (err) {
+                console.error(err);
+                showToast("Не удалось отклонить запрос: " + friendErrorText(err));
+            }
+        }
+
+        async function loadFriendsAndChats() {
+            const container = document.getElementById('chatsList');
+            const token = ++friendsRenderToken;
+
+            const friends = currentUser.friends || [];
+            document.getElementById('friendsCount').innerText = friends.length;
+
+            if (friends.length === 0) {
+                container.innerHTML = '<div class="text-center text-xs text-gray-500 py-10 font-semibold">У вас пока нет друзей. Найдите их через вкладку Поиск 🔍</div>';
+                return;
+            }
+
+            let docs = [];
+            try {
+                docs = await Promise.all(friends.map(fid => userRef(fid).once('value')));
+            } catch (err) {
+                console.error(err);
+                showToast("Не удалось загрузить друзей: " + friendErrorText(err));
+                return;
+            }
+            if (token !== friendsRenderToken) return; // пришло более новое обновление
+
+            const frag = document.createDocumentFragment();
+            docs.forEach(doc => {
+                if (!doc.exists()) return;
+                const fid = doc.key;
+                const f = doc.val() || {};
+                const item = document.createElement('div');
+                item.className = "glass-island p-3.5 rounded-[2rem] flex items-center justify-between cursor-pointer hover:border-zlm-pink transition-all active:scale-98";
+                item.onclick = () => openChat(fid, f.username, f.avatar);
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-full bg-zlm-purple/30 flex items-center justify-center text-xl overflow-hidden border border-white/20">
+                            ${friendAvatarHtml(f.avatar, 'w-full h-full object-cover')}
+                        </div>
+                        <div>
+                            <h3 class="font-extrabold text-sm text-white">${escapeHtml(String(f.username || ''))}</h3>
+                            <p class="text-[10px] text-zlm-cyan font-mono font-bold">${escapeHtml(String(f.zmId || ''))}</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-xs text-gray-500"></i>
+                `;
+                frag.appendChild(item);
+            });
+
+            container.innerHTML = '';
+            container.appendChild(frag);
+        }
+
+        // REAL-TIME GLOBAL CHAT MESSAGES PERSISTENCE
+        let globalChatListener = null;
+        function listenToGlobalChat() {
+            if (globalChatListener) globalChatListener.q.off('value', globalChatListener.cb);
+            const q = db.ref('global_chat').orderByChild('timestamp').limitToLast(1);
+            const cb = snap => {
+                snap.forEach(ch => {
+                    const data = ch.val() || {};
+                    document.getElementById('globalChatLastMsg').innerText = `${data.senderName}: ${data.text || 'Медиасообщение 📹'}`;
+                });
+            };
+            q.on('value', cb, err => console.error(err));
+            globalChatListener = { q, cb };
+        }
+
+        // CHAT ENGINE
+        function openChat(id, name, avatar) {
+            activeChatId = id;
+            document.getElementById('chatActiveName').innerText = name;
+            renderAvatar(document.getElementById('chatActiveAvatar'), avatar);
+            document.getElementById('chatOverlay').classList.remove('hidden');
+            window.history.pushState({ chatOpen: true }, '');
+            loadMessages();
+        }
+
+        let messagesListener = null;
+        function detachMessagesListener() {
+            if (messagesListener) {
+                messagesListener.q.off('value', messagesListener.cb);
+                messagesListener = null;
+            }
+        }
+
+        function closeChat() {
+            document.getElementById('chatOverlay').classList.add('hidden');
+            activeChatId = null;
+            detachMessagesListener();
+        }
+
+        function loadMessages() {
+            const container = document.getElementById('messagesContainer');
+            detachMessagesListener();
+            const q = db.ref(chatPath()).orderByChild('timestamp').limitToLast(100);
+
+            const cb = snap => {
+                container.innerHTML = '';
+                snap.forEach(ch => {
+                    const m = ch.val() || {};
+                    const isMe = m.senderId === currentUser.id;
+
+                    const msgCard = document.createElement('div');
+                    msgCard.className = `flex flex-col my-1 max-w-[82%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`;
+
+                    let contentHtml = '';
+
+                    if (m.type === 'text') {
+                        contentHtml = `<div class="px-4 py-2.5 rounded-2xl text-sm font-semibold shadow-md ${isMe ? 'bg-gradient-to-r from-zlm-pink to-zlm-purple text-white' : 'glass-island text-white'}">${escapeHtml(m.text)}</div>`;
+                    } else if (m.type === 'photo') {
+                        contentHtml = `<img src="${m.url}" class="w-60 h-60 object-cover rounded-3xl border-2 border-zlm-cyan shadow-neon-cyan">`;
+                    } else if (m.type === 'videoCircle') {
+                        contentHtml = `<video src="${m.url}" controls autoplay loop muted playsinline class="video-note"></video>`;
+                    } else if (m.type === 'audio') {
+                        contentHtml = `<audio src="${m.url}" controls class="rounded-2xl max-w-full"></audio>`;
+                    } else if (m.type === 'bump') {
+                        contentHtml = `<div class="text-6xl p-2 bump-effect">${m.text}</div>`;
+                        triggerBumpVisual(m.text);
+                    }
+
+                    msgCard.innerHTML = `
+                        <span class="text-[9px] text-gray-400 font-bold mb-1 px-1">${m.senderName}</span>
+                        ${contentHtml}
+                    `;
+                    container.appendChild(msgCard);
+                });
+                container.scrollTop = container.scrollHeight;
+            };
+
+            q.on('value', cb, err => {
+                console.error(err);
+                showToast("Ошибка чата: " + friendErrorText(err));
+            });
+            messagesListener = { q, cb };
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        // SENDING MESSAGES
+        async function sendTextMessage() {
+            const input = document.getElementById('chatMessageInput');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+
+            await saveMessageToFirestore({ type: 'text', text: text });
+        }
+
+        async function sendBump(emoji) {
+            await saveMessageToFirestore({ type: 'bump', text: emoji });
+            confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+        }
+
+        function triggerBumpVisual(emoji) {
+            const overlay = document.getElementById('bumpOverlay');
+            const display = document.getElementById('bumpEmojiDisplay');
+            display.innerText = emoji;
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.add('hidden'), 800);
+        }
+
+        async function sendPhotoMessage(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            showToast("Загрузка фото...");
+
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                await saveMessageToFirestore({ type: 'photo', url: ev.target.result });
+                showToast("Фото отправлено!");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // VIDEO CIRCLE & AUDIO RECORDING
+        async function toggleVideoCircleRecord() {
+            const btn = document.getElementById('videoNoteBtn');
+            if (!isRecordingVideo) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    recordedChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                            await saveMessageToFirestore({ type: 'videoCircle', url: ev.target.result });
+                            showToast("Кружочек отправлен! 📹");
+                        };
+                        reader.readAsDataURL(blob);
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+                    mediaRecorder.start();
+                    isRecordingVideo = true;
+                    btn.classList.add('bg-red-500', 'animate-pulse');
+                    showToast("Запись видео-кружочка...");
+                } catch (err) {
+                    alert("Нет доступа к камере/микрофону!");
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecordingVideo = false;
+                btn.classList.remove('bg-red-500', 'animate-pulse');
+            }
+        }
+
+        async function toggleAudioRecord() {
+            const btn = document.getElementById('audioRecordBtn');
+            if (!isRecordingAudio) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    recordedChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                            await saveMessageToFirestore({ type: 'audio', url: ev.target.result });
+                            showToast("Голосовое отправлено! 🎙️");
+                        };
+                        reader.readAsDataURL(blob);
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+                    mediaRecorder.start();
+                    isRecordingAudio = true;
+                    btn.classList.add('bg-red-500', 'animate-pulse');
+                    showToast("Запись голосового сообщения...");
+                } catch (err) {
+                    alert("Нет доступа к микрофону!");
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecordingAudio = false;
+                btn.classList.remove('bg-red-500', 'animate-pulse');
+            }
+        }
+
+        async function saveMessageToFirestore(msgObj) {
+            try {
+                await withTimeout(db.ref(chatPath()).push({
+                    ...msgObj,
+                    senderId: currentUser.id,
+                    senderName: currentUser.username,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                }));
+            } catch (err) {
+                console.error(err);
+                showToast("Сообщение не отправлено: " + friendErrorText(err));
+            }
+        }
+
+        // PROFILE DRAWER HANDLERS
+        function openProfileDrawer(user) {
+            document.getElementById('drawerUsername').innerText = user.username;
+            document.getElementById('drawerZmId').innerText = user.zmId;
+            renderAvatar(document.getElementById('drawerAvatar'), user.avatar);
+
+            renderSavedAccounts();
+            document.getElementById('profileDrawer').style.transform = 'translateY(0)';
+            window.history.pushState({ drawerOpen: true }, '');
+        }
+
+        function closeProfileDrawer() {
+            document.getElementById('profileDrawer').style.transform = 'translateY(100%)';
+        }
+
+        // WEBRTC CALL SCREEN
+        async function triggerCallModal(type) {
+            document.getElementById('callModal').classList.remove('hidden');
+            document.getElementById('callTargetName').innerText = document.getElementById('chatActiveName').innerText;
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+            } catch (e) {
+                console.log("Media error fallback:", e);
+            }
+        }
+
+        function endRealCall() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('callModal').classList.add('hidden');
+        }
+
+        // ANIMATED CANVAS BACKGROUND
+        function initLiveBackground() {
+            const canvas = document.getElementById('bgCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const pts = [
+                { x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: 180, color: 'rgba(255, 42, 133, 0.15)', vx: 0.4, vy: 0.3 },
+                { x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: 220, color: 'rgba(168, 85, 247, 0.12)', vx: -0.3, vy: 0.4 },
+                { x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: 200, color: 'rgba(0, 242, 254, 0.12)', vx: 0.2, vy: -0.3 }
+            ];
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                pts.forEach(p => {
+                    p.x += p.vx; p.y += p.vy;
+                    if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                    if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+                    let g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+                    g.addColorStop(0, p.color);
+                    g.addColorStop(1, 'transparent');
+
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+    </script>
+</body>
+</html>
